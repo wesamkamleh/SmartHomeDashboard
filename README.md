@@ -8,7 +8,7 @@ Ook wordt een grafiek en AI-voorspelling getoond.
 
 ---
 
-## 🚀 Functionaliteiten (Sprint 1 + 2)
+## 🚀 Functionaliteiten
 
 - ✔ Live aantal bezoekers
 - ✔ Bijna-vol waarschuwing (rood)
