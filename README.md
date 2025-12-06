@@ -26,3 +26,7 @@ Ook wordt een grafiek en AI-voorspelling getoond.
 ```bash
 pip install -r requirements.txt
 
+Start de app:
+
+python main.py
+
