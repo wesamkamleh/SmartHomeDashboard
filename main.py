@@ -73,12 +73,12 @@ class SmartHomeApp:
             times = data["hourly"]["time"][:24]
             temps = data["hourly"]["temperature_2m"][:24]
 
-            # Oude grafiek verwijderen als die er nog staat
+
             for widget in self.dashboard_frame.winfo_children():
                 if widget != self.label:
                     widget.destroy()
 
-            # Nieuwe figuur tekenen
+
             figure = plt.Figure(figsize=(7, 4), dpi=100)
             ax = figure.add_subplot(111)
             ax.plot(times, temps, marker="o")
