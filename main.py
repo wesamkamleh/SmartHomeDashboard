@@ -1,116 +1,195 @@
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import tkinter as tk
-from tkinter import ttk
-import requests
 import json
 from pathlib import Path
-OPEN_METEO_URL = (
-    "https://api.open-meteo.com/v1/forecast"
-    "?latitude=52.0908"
-    "&longitude=5.1222"
-    "&hourly=temperature_2m,relative_humidity_2m"
-    "&timezone=auto"
-)
+import tkinter as tk
+from tkinter import ttk
 
-class SmartHomeApp:
-    def __init__(self, root):
-        root.title("Smart Home Dashboard")
-        root.geometry("900x600")
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
-        # Layout frames
-        self.menu_frame = tk.Frame(root, width=200, bg="#1e90ff")
-        self.menu_frame.pack(side="left", fill="y")
+DATA_FILE = Path("data") / "gym_visits.json"
 
-        self.dashboard_frame = tk.Frame(root, bg="white")
-        self.dashboard_frame.pack(side="right", fill="both", expand=True)
 
-        # Menu knoppen
-        ttk.Button(self.menu_frame, text="Weer Data Laden", command=self.load_weather).pack(pady=10)
-        ttk.Button(self.menu_frame, text="Grafiek Weer", command=self.show_graph).pack(pady=10)
-        ttk.Button(self.menu_frame, text="SmartHome Data", command=self.show_smart_data).pack(pady=10)
+class SmartGymDashboard(tk.Tk):
+    def __init__(self):
+        super().__init__()
 
-        self.label = tk.Label(self.dashboard_frame, text="Dashboard Loaded", font=("Arial", 16))
-        self.label.pack(pady=20)
+        self.title("SmartGym – Bezoekers Dashboard")
+        self.geometry("1000x600")
 
-    def load_weather(self):
-        """Download weerdata van Open-Meteo en sla op in data/weather.json"""
-        self.label.config(text="Weer data wordt geladen...")
+        # Live update ON/OFF toggle
+        self.live_update_enabled = False
 
+        # MENU FRAME
+        self.menu_frame = tk.Frame(self, bg="#007bff", width=180)
+        self.menu_frame.pack(side=tk.LEFT, fill=tk.Y)
+
+        # CONTENT FRAME
+        self.content_frame = tk.Frame(self, bg="white")
+        self.content_frame.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
+
+        self.status_label = tk.Label(
+            self.content_frame,
+            text="Welkom bij SmartGym Dashboard",
+            font=("Arial", 16, "bold"),
+            bg="white"
+        )
+        self.status_label.pack(pady=10)
+
+        self.info_frame = tk.Frame(self.content_frame, bg="white")
+        self.info_frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=10)
+
+        # MENU BUTTONS
+        ttk.Button(self.menu_frame, text="Live overzicht", command=self.show_live_overview).pack(padx=10, pady=10, fill=tk.X)
+        ttk.Button(self.menu_frame, text="Grafiek drukte", command=self.show_hourly_graph).pack(padx=10, pady=10, fill=tk.X)
+        ttk.Button(self.menu_frame, text="Live Update Mode", command=self.enable_auto_update).pack(padx=10, pady=10, fill=tk.X)
+        ttk.Button(self.menu_frame, text="Voorspelling AI", command=self.show_prediction).pack(padx=10, pady=10, fill=tk.X)
+        ttk.Button(self.menu_frame, text="SDG-Uitleg", command=self.show_sdg).pack(padx=10, pady=10, fill=tk.X)
+
+    # HELPER FUNCTIES --------------------------------------------------
+
+    def _load_data(self):
+        with DATA_FILE.open() as f:
+            return json.load(f)
+
+    def _save_data(self, data):
+        with DATA_FILE.open("w") as f:
+            json.dump(data, f, indent=4)
+
+    def _clear_info(self):
+        for widget in self.info_frame.winfo_children():
+            widget.destroy()
+
+    # LIVE OVERZICHT -------------------------------------------------------
+
+    def show_live_overview(self):
         try:
-            # 1. Request naar de API sturen
-            response = requests.get(OPEN_METEO_URL, timeout=10)
-            response.raise_for_status()  # fout als statuscode != 200
+            data = self._load_data()
 
-            # 2. JSON uit de response halen
-            weather_data = response.json()
+            current = data["current_visitors"]
+            max_c = data["max_capacity"]
+            last_in = data.get("last_entry", "-")
+            last_out = data.get("last_exit", "-")
 
-            # 3. data-map en bestandsnaam
-            data_dir = Path("data")
-            data_dir.mkdir(exist_ok=True)  # maakt map als hij nog niet bestaat
-            json_path = data_dir / "weather.json"
+            ratio = current / max_c
+            kleur = "green"
+            waarschuwing = ""
 
-            # 4. JSON opslaan in bestand
-            with json_path.open("w", encoding="utf-8") as f:
-                json.dump(weather_data, f, indent=4)
+            if ratio >= 0.9:
+                kleur = "red"
+                waarschuwing = "\n⚠️ MAX capaciteit bijna bereikt!"
+            elif ratio >= 0.7:
+                kleur = "orange"
+                waarschuwing = "\n⚠️ Het wordt druk!"
 
-            # 5. Feedback naar de gebruiker
-            self.label.config(text=f"Weerdata opgeslagen in {json_path}")
+            txt = (
+                f"Huidig aantal bezoekers: {current}/{max_c}\n"
+                f"Laatst binnen: {last_in}\n"
+                f"Laatst vertrokken: {last_out}"
+                f"{waarschuwing}"
+            )
 
-        except requests.exceptions.RequestException as e:
-            # Als internet / API fout gaat
-            self.label.config(text=f"Fout bij ophalen weerdata: {e}")
+            self._clear_info()
+            tk.Label(self.info_frame, text="Live overzicht", bg="white", font=("Arial", 20, "bold")).pack(pady=5)
+            tk.Label(self.info_frame, text=txt, bg="white", font=("Arial", 16), fg=kleur).pack()
+
         except Exception as e:
-            # Andere fouten (bijv. wegschrijven bestand)
-            self.label.config(text=f"Onverwachte fout: {e}")
+            self.status_label.config(text=f"FOUT: {e}", fg="red")
 
-    def show_graph(self):
+    # GRAFIEK ---------------------------------------------------------
+
+    def show_hourly_graph(self):
         try:
-            # JSON data laden
-            with open("data/weather.json", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self._load_data()
+            values = data["visitors_per_hour"]
+            hours = list(range(len(values)))
 
-            times = data["hourly"]["time"][:24]
-            temps = data["hourly"]["temperature_2m"][:24]
+            self._clear_info()
 
+            fig = Figure(figsize=(6, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            ax.bar(hours, values, color="#007bff")
+            ax.set_title("Drukte per uur", fontsize=14)
+            ax.set_xlabel("Uur")
+            ax.set_ylabel("Bezoekers")
+            ax.set_xticks(hours)
+            ax.set_xticklabels(hours, rotation=45, ha="right")
 
-            for widget in self.dashboard_frame.winfo_children():
-                if widget != self.label:
-                    widget.destroy()
-
-
-            figure = plt.Figure(figsize=(7, 4), dpi=100)
-            ax = figure.add_subplot(111)
-            ax.plot(times, temps, marker="o")
-
-            # X-as labels verbeteren
-            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=7)
-            for i, label in enumerate(ax.get_xticklabels()):
-                if i % 3 != 0:
-                    label.set_visible(False)
-
-            ax.set_title("Temperatuur (eerste 24 uur)", fontsize=12, fontweight="bold")
-            ax.set_ylabel("°C")
-
-            figure.tight_layout()
-
-            # In GUI plaatsen
-            canvas = FigureCanvasTkAgg(figure, master=self.dashboard_frame)
+            canvas = FigureCanvasTkAgg(fig, master=self.info_frame)
             canvas.draw()
-            canvas.get_tk_widget().pack()
+            canvas.get_tk_widget().pack(expand=True, fill=tk.BOTH)
 
-            self.label.config(text="Grafiek geladen!")
+            self.status_label.config(text="Grafiek weergegeven")
 
-        except FileNotFoundError:
-            self.label.config(text="⚠️ Geen weerdata gevonden (klik eerst op Weer Data Laden)")
-        except json.JSONDecodeError:
-            self.label.config(text="⚠️ weather.json is kapot, download opnieuw")
         except Exception as e:
-            self.label.config(text=f"⚠️ Fout: {e}")
+            self.status_label.config(text=f"FOUT: {e}", fg="red")
 
-    def show_smart_data(self):
-        self.label.config(text="SmartHome data...")
+    # LIVE UPDATE MODE FIXED ---------------------------------------------------------
 
-root = tk.Tk()
-app = SmartHomeApp(root)
-root.mainloop()
+    def enable_auto_update(self):
+        self.live_update_enabled = not self.live_update_enabled
+
+        if not self.live_update_enabled:
+            self.status_label.config(text="Live update UIT", fg="red")
+            return
+
+        self.status_label.config(text="Live update AAN", fg="green")
+        self.update_live_data()
+
+    def update_live_data(self):
+        if not self.live_update_enabled:
+            return
+
+        try:
+            import random
+            data = self._load_data()
+            change = random.choice([-1, 1])
+            data["current_visitors"] = max(0, min(data["current_visitors"] + change, data["max_capacity"]))
+            self._save_data(data)
+
+            self.show_live_overview()
+            self.after(10000, self.update_live_data)
+
+        except Exception as e:
+            self.status_label.config(text=f"FOUT: {e}", fg="red")
+
+    # AI ------------------------------------------------------------
+
+    def show_prediction(self):
+        try:
+            data = self._load_data()
+            current = data["current_visitors"]
+            max_c = data["max_capacity"]
+            predicted = current + int((max_c - current) * 0.2)
+
+            self._clear_info()
+            tk.Label(self.info_frame, text=f"📈 Verwachte drukte over 1 uur: {predicted}", font=("Arial", 18, "bold"), bg="white", fg="purple").pack(pady=50)
+
+            self.status_label.config(text="Voorspelling AI getoond")
+
+        except Exception as e:
+            self.status_label.config(text=f"FOUT: {e}", fg="red")
+
+    # SDG ------------------------------------------------------------
+
+    def show_sdg(self):
+        self._clear_info()
+
+        txt = (
+            "🌱 SDG - Duurzame Impact\n\n"
+            "SmartGym helpt minder energie gebruiken:\n\n"
+            "• Minder airco bij lage bezetting\n"
+            "• Slimme planning personeel\n"
+            "• Lager stroomverbruik = minder CO₂\n\n"
+            "SDG 9 – Industrie, innovatie & infrastructuur\n"
+            "SDG 12 – Verantwoorde consumptie"
+        )
+
+        tk.Label(self.info_frame, text=txt, font=("Arial", 14), bg="white", justify="left").pack(padx=20, pady=20)
+        self.status_label.config(text="SDG uitleg getoond")
+
+
+if __name__ == "__main__":
+    app = SmartGymDashboard()
+    app.mainloop()
